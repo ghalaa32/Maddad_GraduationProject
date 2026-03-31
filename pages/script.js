@@ -104,7 +104,6 @@ function submitLogin() {
   const passwordInput = document.getElementById("parentLoginPassword");
 
   validateEmail(emailInput, "loginEmailError");
-  validatePassword(passwordInput, "loginPasswordError", false); // hide rules on login
 
   const emailValid = !document.getElementById("loginEmailError").textContent;
   const passwordValid = passwordInput.dataset.valid === "true";
