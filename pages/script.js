@@ -147,7 +147,7 @@ function submitSignup() {
   }
 }
 
-function parentSignup() {
+async function parentSignup() {
   const childName = document.getElementById("signupChildName").value.trim();
   const childAge = document.getElementById("signupChildAge").value;
   const childGender = document.getElementById("signupChildGender").value;
@@ -159,43 +159,61 @@ function parentSignup() {
     return;
   }
 
-  const account = {
-    childName: childName,
-    childAge: childAge,
-    childGender: childGender,
-    email: email,
-    password: password,
-    createdAt: new Date().toLocaleDateString("ar-SA")
-    
-  };
-
-  localStorage.setItem("maddadAccount", JSON.stringify(account));
-  localStorage.setItem("maddadLoggedIn", "true");
+  // Try the backend API first; fall back to localStorage if unavailable
+  try {
+    await apiRegister({
+      email,
+      password,
+      child_name: childName,
+      child_age: childAge,
+      child_gender: childGender,
+    });
+  } catch (err) {
+    if (err.status === 409) {
+      alert("البريد الإلكتروني مستخدم بالفعل");
+      return;
+    }
+    // Backend unavailable – cache non-sensitive profile info only (no password)
+    const account = {
+      childName,
+      childAge,
+      childGender,
+      email,
+      createdAt: new Date().toLocaleDateString("ar-SA"),
+    };
+    localStorage.setItem("maddadAccount", JSON.stringify(account));
+    localStorage.setItem("maddadLoggedIn", "true");
+  }
 
   window.location.href = "home-new.html";
 }
 
-function parentLogin() {
+async function parentLogin() {
   const email = document.getElementById("parentLoginEmail").value.trim();
   const password = document.getElementById("parentLoginPassword").value.trim();
-
-  const savedAccount = JSON.parse(localStorage.getItem("maddadAccount"));
 
   if (!email || !password) {
     alert("فضلاً أدخلي البريد الإلكتروني وكلمة المرور");
     return;
   }
 
-  if (!savedAccount) {
-    alert("لا يوجد حساب محفوظ حالياً. أنشئي حساب أولاً");
-    return;
-  }
-
-  if (email === savedAccount.email && password === savedAccount.password) {
-    localStorage.setItem("maddadLoggedIn", "true");
+  // Try the backend API first
+  try {
+    await apiLogin(email, password);
     window.location.href = "home-login.html";
-  } else {
-    alert("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+    return;
+  } catch (err) {
+    if (err.status === 401 || err.status === 403) {
+      alert("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+      return;
+    }
+    // Backend unavailable – check whether a cached session exists for this email
+    const savedAccount = JSON.parse(localStorage.getItem("maddadAccount"));
+    if (savedAccount && email === savedAccount.email && localStorage.getItem("maddadLoggedIn") === "true") {
+      window.location.href = "home-login.html";
+    } else {
+      alert("تعذّر الوصول إلى الخادم. يرجى التحقق من الاتصال بالإنترنت والمحاولة مرة أخرى.");
+    }
   }
 }
 
@@ -203,8 +221,8 @@ function parentLogin() {
    HOME NEW PAGE
 ========================= */
 
-function logout() {
-  localStorage.removeItem("maddadLoggedIn");
+async function logout() {
+  await apiLogout();
   window.location.href = "../index.html";
 }
 
@@ -225,7 +243,7 @@ function goSettings() {
   window.location.href = "settings.html";
 }
 
-function loadLoginHomePage() {
+async function loadLoginHomePage() {
   const loggedIn = localStorage.getItem("maddadLoggedIn");
   const savedAccount = JSON.parse(localStorage.getItem("maddadAccount"));
 
@@ -234,6 +252,18 @@ function loadLoginHomePage() {
     return;
   }
 
+  // Refresh profile from the API (silently falls back to cache on error)
+  let account = savedAccount;
+  try {
+    const profile = await apiGetProfile();
+    account = {
+      childName: profile.child_name,
+      childAge: profile.child_age,
+      childGender: profile.child_gender,
+      email: profile.email,
+    };
+  } catch (_) {}
+
   const welcomeTitle = document.getElementById("welcomeTitle");
   const childNameText = document.getElementById("childNameText");
   const childAgeText = document.getElementById("childAgeText");
@@ -241,23 +271,23 @@ function loadLoginHomePage() {
   const emailText = document.getElementById("emailText");
 
   if (welcomeTitle) {
-    welcomeTitle.textContent = `أهلًا ولي أمر ${savedAccount.childName || ""}`;
+    welcomeTitle.textContent = `أهلًا ولي أمر ${account.childName || ""}`;
   }
 
   if (childNameText) {
-    childNameText.textContent = savedAccount.childName || "-";
+    childNameText.textContent = account.childName || "-";
   }
 
   if (childAgeText) {
-    childAgeText.textContent = savedAccount.childAge || "-";
+    childAgeText.textContent = account.childAge || "-";
   }
 
   if (childGenderText) {
-    childGenderText.textContent = savedAccount.childGender || "-";
+    childGenderText.textContent = account.childGender || "-";
   }
 
   if (emailText) {
-    emailText.textContent = savedAccount.email || "-";
+    emailText.textContent = account.email || "-";
   }
 }
 
@@ -562,7 +592,7 @@ function goNextQuestion() {
   }
 }
 
-function finishQuestionnaire() {
+async function finishQuestionnaire() {
   const account = getSavedAccount();
 
   const answers = {
@@ -582,6 +612,24 @@ function finishQuestionnaire() {
   const initialRisk = classifyRisk(account.childAge, score);
   const failedSkills = getFailedSkills(answers);
 
+  let mlRisk = initialRisk;
+  let mlConfidence = null;
+  let resultId = null;
+
+  // Request ML prediction from the backend
+  try {
+    const apiResult = await apiSubmitQuestionnaire(
+      account.childAge,
+      account.childGender,
+      answers
+    );
+    mlRisk = apiResult.prediction.risk;
+    mlConfidence = apiResult.prediction.confidence;
+    resultId = apiResult.result_id;
+  } catch (_) {
+    // Backend unavailable – use rule-based result only
+  }
+
   const assessment = {
     ageGroup: account.childAge,
     gender: account.childGender,
@@ -589,6 +637,9 @@ function finishQuestionnaire() {
     currentAnswers: { ...answers },
     initialScore: score,
     initialRisk: initialRisk,
+    mlRisk: mlRisk,
+    mlConfidence: mlConfidence,
+    resultId: resultId,
     failedSkills: failedSkills,
     followupNeeded: (initialRisk === "medium" || initialRisk === "high"),
     followupComplete: false,
@@ -728,10 +779,14 @@ function loadResultPage() {
 
 
 
+  const mlLine = (assessment.mlRisk && assessment.mlConfidence)
+    ? `<br><strong>تقدير الذكاء الاصطناعي:</strong> ${riskTextArabic(assessment.mlRisk)} (${Math.round(assessment.mlConfidence * 100)}%)`
+    : "";
+
   resultSummary.innerHTML = `
     <strong>العمر:</strong> ${assessment.ageGroup} شهر تقريبًا<br>
     <strong>مجموع الإجابات (لا):</strong> ${shownScore}<br>
-    <strong>مستوى الخطورة:</strong> ${riskTextArabic(shownRisk)}
+    <strong>مستوى الخطورة:</strong> ${riskTextArabic(shownRisk)}${mlLine}
   `;
 }
 
@@ -1131,7 +1186,7 @@ function goPrevFollowup() {
   }
 }
 
-function finalizeFollowup() {
+async function finalizeFollowup() {
   const assessment = getAssessment();
   if (!assessment) {
     window.location.href = "questionnaire.html";
@@ -1142,16 +1197,40 @@ function finalizeFollowup() {
   const finalScore = calculateScore(updatedAnswers);
   const finalRisk = classifyRisk(assessment.ageGroup, finalScore);
 
+  let mlRisk = finalRisk;
+  let mlConfidence = null;
+
+  // Request refined ML prediction from the backend
+  try {
+    if (assessment.resultId) {
+      const apiResult = await apiSubmitFollowup(assessment.resultId, followupCollectedAnswers);
+      mlRisk = apiResult.prediction.risk;
+      mlConfidence = apiResult.prediction.confidence;
+    } else {
+      const apiResult = await apiSubmitQuestionnaire(
+        assessment.ageGroup,
+        assessment.gender,
+        updatedAnswers
+      );
+      mlRisk = apiResult.prediction.risk;
+      mlConfidence = apiResult.prediction.confidence;
+    }
+  } catch (_) {
+    // Backend unavailable – use rule-based result
+  }
+
   assessment.currentAnswers = updatedAnswers;
   assessment.finalScore = finalScore;
   assessment.finalRisk = finalRisk;
+  assessment.mlRisk = mlRisk;
+  assessment.mlConfidence = mlConfidence;
   assessment.followupComplete = true;
 
   let history = JSON.parse(localStorage.getItem("maddadHistory")) || [];
 
   history.push({
     date: new Date().toLocaleDateString("ar-SA"),
-    risk: riskTextArabic(finalRisk),
+    risk: riskTextArabic(mlRisk || finalRisk),
     score: finalScore
   });
 
@@ -1631,31 +1710,6 @@ function loadGrowthDetailPage() {
   }
 }
 
-/* =========================
-   SETTINGS PAGE
-========================= */
-
-function loadSettingsPage(){
-
-const user = JSON.parse(localStorage.getItem("maddadUser")) || {};
-
-document.getElementById("settingsEmail").textContent =
-user.email || "غير متوفر";
-
-document.getElementById("settingsCreated").textContent =
-user.createdAt || "غير متوفر";
-
-document.getElementById("settingsChildAge").textContent =
-user.childAge || "غير متوفر";
-
-document.getElementById("settingsChildGender").textContent =
-user.childGender || "غير متوفر";
-
-}
-
-
-
-
 
 function openAbout(){
 
@@ -1673,8 +1727,23 @@ function goSettings() {
   window.location.href = "settings.html";
 }
 
-function loadSettingsPage() {
-  const account = JSON.parse(localStorage.getItem("maddadAccount")) || {};
+async function loadSettingsPage() {
+  // Try to get fresh data from the API; fall back to localStorage cache
+  let account;
+  try {
+    const profile = await apiGetProfile();
+    account = {
+      childName: profile.child_name,
+      childAge: profile.child_age,
+      childGender: profile.child_gender,
+      email: profile.email,
+      createdAt: profile.created_at
+        ? new Date(profile.created_at).toLocaleDateString("ar-SA")
+        : (JSON.parse(localStorage.getItem("maddadAccount")) || {}).createdAt || "غير متوفر",
+    };
+  } catch (_) {
+    account = JSON.parse(localStorage.getItem("maddadAccount")) || {};
+  }
 
   const childNameEl = document.getElementById("settingsChildName");
   const emailEl = document.getElementById("settingsEmail");
@@ -1683,8 +1752,8 @@ function loadSettingsPage() {
   const childGenderEl = document.getElementById("settingsChildGender");
 
   if (childNameEl) {
-  childNameEl.textContent = account.childName || "غير متوفر";
-}
+    childNameEl.textContent = account.childName || "غير متوفر";
+  }
 
   if (emailEl) {
     emailEl.textContent = account.email || "غير متوفر";
@@ -1701,14 +1770,6 @@ function loadSettingsPage() {
   if (childGenderEl) {
     childGenderEl.textContent = account.childGender || "غير متوفر";
   }
-}
-
-
-
-function openAbout() {
-  alert(
-    "مدد هو نظام رقمي يساعد أولياء الأمور على دعم نمو أطفالهم من خلال أدوات تقييم مبكرة وأنشطة تفاعلية ونصائح موجهة تساعد على تطوير المهارات الأساسية بطريقة ممتعة وآمنة."
-  );
 }
 
 /* =========================
@@ -1734,27 +1795,32 @@ function submitChildLogin() {
   }
 }
 
-function childLogin() {
+async function childLogin() {
   const email = document.getElementById("childLoginEmail").value.trim();
   const password = document.getElementById("childLoginPassword").value.trim();
-
-  const savedAccount = JSON.parse(localStorage.getItem("maddadAccount"));
 
   if (!email || !password) {
     alert("يرجى إدخال البريد الإلكتروني وكلمة المرور");
     return;
   }
 
-  if (!savedAccount) {
-    alert("لا يوجد حساب ولي أمر مسجل");
-    return;
-  }
-
-  if (email === savedAccount.email && password === savedAccount.password) {
-    localStorage.setItem("maddadLoggedIn", "true");
+  // Try the backend API first
+  try {
+    await apiLogin(email, password);
     window.location.href = "child.html";
-  } else {
-    alert("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+    return;
+  } catch (err) {
+    if (err.status === 401 || err.status === 403) {
+      alert("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+      return;
+    }
+    // Backend unavailable – allow access if a session is already cached for this email
+    const savedAccount = JSON.parse(localStorage.getItem("maddadAccount"));
+    if (savedAccount && email === savedAccount.email && localStorage.getItem("maddadLoggedIn") === "true") {
+      window.location.href = "child.html";
+    } else {
+      alert("تعذّر الوصول إلى الخادم. يرجى التحقق من الاتصال بالإنترنت والمحاولة مرة أخرى.");
+    }
   }
 }
 
@@ -1907,22 +1973,30 @@ function enableSettingsEdit() {
   saveBtn.style.display = "inline-block";
 }
 
-function saveSettingsData() {
-  const account = JSON.parse(localStorage.getItem("maddadAccount")) || {};
-
+async function saveSettingsData() {
   const newName = document.getElementById("editChildName")?.value.trim() || "";
   const newEmail = document.getElementById("editEmail")?.value.trim() || "";
   const newAge = document.getElementById("editChildAge")?.value || "";
   const newGender = document.getElementById("editChildGender")?.value || "";
 
-  account.childName = newName;
-  account.email = newEmail;
-  account.childAge = newAge;
-  account.childGender = newGender;
+  // Try to persist via API; fall back to localStorage-only update
+  try {
+    await apiUpdateProfile({
+      child_name: newName || undefined,
+      email: newEmail || undefined,
+      child_age: newAge || undefined,
+      child_gender: newGender || undefined,
+    });
+  } catch (_) {
+    const account = JSON.parse(localStorage.getItem("maddadAccount")) || {};
+    account.childName = newName;
+    account.email = newEmail;
+    account.childAge = newAge;
+    account.childGender = newGender;
+    localStorage.setItem("maddadAccount", JSON.stringify(account));
+  }
 
-  localStorage.setItem("maddadAccount", JSON.stringify(account));
-
-  loadSettingsPage();
+  await loadSettingsPage();
 
   const editBtn = document.getElementById("editSettingsBtn");
   const saveBtn = document.getElementById("saveSettingsBtn");

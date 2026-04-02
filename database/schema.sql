@@ -84,14 +84,19 @@ CREATE TRIGGER set_users_updated_at
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE parent_profiles (
-    id          BIGSERIAL       PRIMARY KEY,
-    user_id     BIGINT          NOT NULL,
-    occupation  VARCHAR(150),
-    address     VARCHAR(255),
-    city        VARCHAR(100),
-    country     VARCHAR(100),
-    postal_code VARCHAR(20),
-    bio         TEXT,
+    id              BIGSERIAL       PRIMARY KEY,
+    user_id         BIGINT          NOT NULL,
+    occupation      VARCHAR(150),
+    address         VARCHAR(255),
+    city            VARCHAR(100),
+    country         VARCHAR(100),
+    postal_code     VARCHAR(20),
+    bio             TEXT,
+
+    -- Child information collected at registration
+    child_name      VARCHAR(100),
+    child_age_group VARCHAR(10),    -- '12-18' | '19-24' | '25-30' | '31-36'
+    child_gender    VARCHAR(10),    -- 'ذكر' | 'أنثى'
 
     CONSTRAINT parent_profiles_user_id_unique UNIQUE (user_id),
     CONSTRAINT fk_parent_profiles_user
@@ -317,3 +322,55 @@ CREATE TABLE sessions (
 
 CREATE INDEX idx_sessions_user_expires ON sessions (user_id, expires_at);
 CREATE INDEX idx_sessions_token        ON sessions (session_token);
+
+-- ---------------------------------------------------------------------------
+-- ENUM TYPES (questionnaire)
+-- ---------------------------------------------------------------------------
+
+CREATE TYPE risk_level AS ENUM ('low', 'medium', 'high');
+
+-- ---------------------------------------------------------------------------
+-- TABLE: questionnaire_results
+-- Stores each ASD screening assessment including raw answers, scores,
+-- rule-based risk classification, and the ML model prediction.
+-- Accumulates a dataset that can be used to retrain the ML model over time.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE questionnaire_results (
+    id                    BIGSERIAL     PRIMARY KEY,
+    user_id               BIGINT        NOT NULL,
+    age_group             VARCHAR(10)   NOT NULL,   -- e.g. '12-18', '19-24'
+    gender                VARCHAR(10)   NOT NULL,   -- 'ذكر' | 'أنثى'
+
+    -- The 10 skill answers: 0 = نعم (typical), 1 = لا (concern)
+    response_to_name      SMALLINT      NOT NULL CHECK (response_to_name      IN (0,1)),
+    eye_contact           SMALLINT      NOT NULL CHECK (eye_contact           IN (0,1)),
+    social_smile          SMALLINT      NOT NULL CHECK (social_smile          IN (0,1)),
+    imitation             SMALLINT      NOT NULL CHECK (imitation             IN (0,1)),
+    discrimination        SMALLINT      NOT NULL CHECK (discrimination        IN (0,1)),
+    pointing_with_finger  SMALLINT      NOT NULL CHECK (pointing_with_finger  IN (0,1)),
+    facial_expressions    SMALLINT      NOT NULL CHECK (facial_expressions    IN (0,1)),
+    joint_attention       SMALLINT      NOT NULL CHECK (joint_attention       IN (0,1)),
+    play_skills           SMALLINT      NOT NULL CHECK (play_skills           IN (0,1)),
+    response_to_commands  SMALLINT      NOT NULL CHECK (response_to_commands  IN (0,1)),
+
+    -- Scores and classification from the initial questionnaire
+    initial_score         SMALLINT      NOT NULL,
+    initial_risk          risk_level    NOT NULL,
+
+    -- Answers updated after follow-up questions (NULL if follow-up not done)
+    followup_answers      JSONB,
+    final_score           SMALLINT,
+    final_risk            risk_level,
+
+    -- ML model prediction for the final risk level
+    ml_risk               risk_level,
+    ml_confidence         NUMERIC(5, 4),            -- e.g. 0.8732
+
+    created_at            TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_questionnaire_results_user
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_qr_user_created ON questionnaire_results (user_id, created_at DESC);

@@ -67,18 +67,35 @@
   </div>
 
   <!-- ربط الجافاسكربت -->
+  <script src="pages/api.js"></script>
   <script src="pages/script.js"></script>
-  <script src="js/auth.js"></script>
   <script>
-    function handleRegister() {
-      var formData = {
-        username: document.getElementById('username').value,
-        fullName: document.getElementById('fullName').value,
-        email: document.getElementById('email').value,
-        phone: document.getElementById('phone').value,
-        password: document.getElementById('password').value
-      };
-      registerAccount(formData);
+    async function handleRegister() {
+      var username = document.getElementById('username').value.trim();
+      var fullName = document.getElementById('fullName').value.trim();
+      var email = document.getElementById('email').value.trim();
+      var phone = document.getElementById('phone').value.trim();
+      var password = document.getElementById('password').value;
+
+      if (!username || !fullName || !email || !password) {
+        alert('يرجى تعبئة جميع الحقول المطلوبة');
+        return;
+      }
+
+      try {
+        await apiRegister({
+          email: email,
+          password: password,
+          child_name: fullName,
+          child_age: '12-18',
+          child_gender: 'ذكر',
+        });
+        document.getElementById('registerSection').style.display = 'none';
+        document.querySelector('.landing-page-wrap').style.display = 'flex';
+        alert('تم إنشاء الحساب بنجاح');
+      } catch (err) {
+        alert(err.message || 'حدث خطأ أثناء إنشاء الحساب');
+      }
     }
   </script>
 
