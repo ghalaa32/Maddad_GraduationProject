@@ -77,7 +77,7 @@ uvicorn app.main:app --reload
 ```
 
 If you use SQLite, the first run automatically creates `maddad.db` in the `backend` folder and sets up tables.
-If you use Supabase/PostgreSQL with `database/schema.sql`, keep that schema in Supabase and the backend will connect to it via `DATABASE_URL`.
+If you use Supabase/PostgreSQL with `database/schema.sql`, ensure that schema has been applied in Supabase; the backend will connect to those existing tables via `DATABASE_URL`.
 
 You should see output like:
 
