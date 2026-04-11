@@ -13,7 +13,7 @@
  * the app continues to work even without a running server.
  */
 
-const MADDAD_API_BASE = "https://maddad-graduationproject.onrender.com";
+const MADDAD_API_BASE = "http://localhost:8000";
 
 /* -----------------------------------------------------------------------
    Token helpers (stored in sessionStorage so it is cleared on tab close)
