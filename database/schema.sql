@@ -27,7 +27,7 @@ CREATE TYPE task_type AS ENUM ('homework', 'chore', 'learning_goal', 'health_goa
 
 CREATE TYPE task_status AS ENUM ('pending', 'in_progress', 'completed', 'cancelled');
 
-CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
+CREATE TYPE task_priority AS ENUM ('Low', 'Medium', 'High');
 
 CREATE TYPE transaction_type AS ENUM (
     'deposit',
