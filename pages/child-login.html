@@ -3,35 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>مدد | صفحة الطفل</title>
+  <title>مدد | دخول الطفل</title>
   <link rel="stylesheet" href="style.css" />
 </head>
-<body class="child-games-body" onload="loadChildGamesPage()">
+<body class="child-login-body">
 
-  <div class="child-games-shell">
+  <div class="child-login-shell">
 
-    <!-- Top Bar -->
-    <header class="child-games-topbar">
-      <button class="child-games-logout-btn" onclick="logout()" aria-label="تسجيل الخروج">⎋</button>
-      <img src="../pictures/logo.png" class="child-games-top-logo" alt="شعار مدد" />
+    <header class="child-login-topbar">
+      <img src="../pictures/logo.png" class="child-login-logo" alt="شعار مدد" />
+      <button class="child-login-back-btn" onclick="goBackIndex()" aria-label="العودة">←</button>
     </header>
 
-    <!-- Main -->
-    <main class="child-games-main-wrap">
-      <section class="child-games-main-card">
+    <main class="child-login-main">
+      <div class="child-login-card">
 
-        <h1 class="child-games-title">الألعاب</h1>
+        <h1 class="child-login-title">تسجيل دخول الطفل</h1>
 
-        <div class="child-games-tabs">
-          <button class="child-games-tab active" onclick="setChildGamesFilter('all', this)">الألعاب</button>
-          <button class="child-games-tab" onclick="setChildGamesFilter('growth', this)">نقاط النمو</button>
+        <p class="child-login-text">
+          ادخل البريد الإلكتروني وكلمة المرور الخاصة بولي الأمر
+        </p>
+
+        <div class="child-login-form">
+          <input
+            type="email"
+            id="childLoginEmail"
+            placeholder="البريد الإلكتروني"
+            class="child-login-input"
+            oninput="validatePassword(this, 'childPasswordError', false)"
+          />
+          <span class="field-error" id="childEmailError"></span>
+
+          <input
+            type="password"
+            id="childLoginPassword"
+            placeholder="كلمة المرور"
+            class="child-login-input"
+            oninput=""
+          />
+          <span class="field-error" id="childPasswordError"></span>
+
+          <button class="child-login-btn" onclick="submitChildLogin()">
+            الدخول إلى الألعاب
+          </button>
         </div>
 
-        <div class="child-games-scroll-box">
-          <div id="childGamesGrid" class="child-games-grid"></div>
-        </div>
-
-      </section>
+      </div>
     </main>
 
   </div>
