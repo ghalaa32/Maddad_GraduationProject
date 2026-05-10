@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # CORS – comma-separated list of allowed origins (frontend URLs)
     # Example: "http://localhost:3000,https://your-frontend.netlify.app"
     CORS_ORIGINS: str = "*"
+     # Mail settings
+    MAIL_USERNAME: str = ""
+    MAIL_PASSWORD: str = ""
+    MAIL_FROM: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
