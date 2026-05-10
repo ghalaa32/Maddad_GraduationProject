@@ -55,7 +55,7 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(questionnaire.router)
 app.include_router(followup.router)
-app.include_router(permissions.router)
+
 
 
 # ---------------------------------------------------------------------------
